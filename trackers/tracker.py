@@ -5,7 +5,7 @@
 # Modified by Lukas Blecher
 # --------------------------------------------------------
 
-from os.path import dirname, abspath
+from os.path import dirname, abspath, join
 import torch
 from trackers.THOR_modules.wrapper import THOR_SiamMask
 
@@ -13,6 +13,31 @@ from trackers.THOR_modules.wrapper import THOR_SiamMask
 from trackers.SiamMask.net import SiamMaskCustom
 from trackers.SiamMask.siammask import SiamMask_init, SiamMask_track
 from trackers.SiamMask.utils.load_helper import load_pretrain
+
+cfg = {'tracker': {'window_influence': 0.42,
+                   'instance_size': 255,
+                   'base_size': 8,
+                   'out_size': 127,
+                   'seg_thr': 0.3,
+                   'penalty_k': 0.04,
+                   'lr': 0.25},
+       'anchors': {'stride': 8,
+                   'ratios': [0.33, 0.5, 1, 2, 3],
+                   'scales': [8],
+                   'round_dight': 0},
+       'THOR': {'K_st': 6,
+                'K_lt': 3,
+                'iou_tresh': 0.742568,
+                'lb': 0.27996,
+                'tukey_alpha': 0.697998,
+                'lb_type': 'ensemble',
+                'modulate': True,
+                'dilation': 10,
+                'context_temp': 0.5,
+                'viz': False,
+                'verbose': False,
+                'vanilla': False}}
+
 
 class Tracker():
     def __init__(self):
@@ -39,15 +64,14 @@ class Tracker():
 
 
 class SiamMask_Tracker(Tracker):
-    def __init__(self, cfg):
+    def __init__(self, cfg, proj_path=dirname(abspath(__file__))):
         super(SiamMask_Tracker, self).__init__()
         self.cfg = cfg
         self.mask = True
 
         # setting up the model
-        model_path = dirname(abspath(__file__)) + '/SiamMask/model.pth'
         model = SiamMaskCustom(anchors=cfg['anchors'])
-        model = load_pretrain(model, model_path)
+        model = load_pretrain(model, join(proj_path, 'trackers/SiamMask/model.pth'))
         self.model = model.eval().to(self.device)
 
         # set up template memory

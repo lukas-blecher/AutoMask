@@ -38,7 +38,7 @@ def get_subwindow_tracking(im, pos, model_sz, original_sz, avg_chans, out_mode='
     context_ymin = context_ymin + top_pad
     context_ymax = context_ymax + top_pad
 
-    r, c, k = im.shape
+    r, c, k = im_sz
     if any([top_pad, bottom_pad, left_pad, right_pad]):
         te_im = np.zeros((r + top_pad + bottom_pad, c + left_pad + right_pad, k), np.uint8)
         te_im[top_pad:top_pad + r, left_pad:left_pad + c, :] = im
