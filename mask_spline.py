@@ -41,12 +41,12 @@ def crl2mask(crl, width, height, delta=.05, scaling=1):
 def mask2rect(mask):
     y, x = np.where(mask == 1)
     mi, ma = np.array((x.min(), y.min())), np.array((x.max(), y.max()))
-    return mi, (ma-mi)
+    return (mi+ma)/2, (ma-mi)
 
 
-def fit2mask(crl, target, width, height, delta=.05,  scaling=5):
+def fit2mask(crl, target, width, height, delta=.05,  scaling=1):
 
-    target = crl2mask(crl, width, height, delta=delta, scaling=scaling)
+    #target = crl2mask(crl, width, height, delta=delta, scaling=scaling)
 
     def loss(pred, target=target):
         return (target ^ pred).sum()/target.sum()
