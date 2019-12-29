@@ -23,12 +23,12 @@ bl_info = {
 
 class Settings(PropertyGroup):
 
-    my_int: IntProperty(
+    maxnum: IntProperty(
         name = "Int Value",
         description="A integer property",
-        default = 23,
-        min = 10,
-        max = 100
+        default = 3,
+        min = 1,
+        max = 5
         )
 
     my_float: FloatProperty(
@@ -78,13 +78,7 @@ class OBJECT_OT_automask(Operator):
         width, height = self.hw
         return [self.xinvt(coordinate[0]/float(width)), self.yinvt(1-(coordinate[1]/float(height)))]
 
-    def execute(self, context):
-        mask = context.space_data.mask
-        maskSpline = mask.layers.active.splines[0]
-        points = maskSpline.points
-        maskSpline.use_cyclic = True
-        clip = context.space_data.clip
-        self.hw = clip.size
+    def set_coordinate_transform(self):
         if self.hw[0] < self.hw[1]:
             self.xtrans = self.small_trans()
             self.xinvt = self.small_trans(True)
@@ -100,6 +94,16 @@ class OBJECT_OT_automask(Operator):
             self.xinvt = self.big_trans()
             self.ytrans = self.big_trans()
             self.yinvt = self.big_trans()
+
+    def execute(self, context):
+        mask = context.space_data.mask
+        settings = context.scene.settings
+        maskSpline = mask.layers.active.splines[0]
+        points = maskSpline.points
+        maskSpline.use_cyclic = True
+        clip = context.space_data.clip
+        self.hw = clip.size
+        self.set_coordinate_transform()
         framenum = bpy.context.scene.frame_current
         movpath = bpy.path.abspath(clip.filepath)
         co, lhand, rhand = [], [], []
@@ -116,34 +120,30 @@ class OBJECT_OT_automask(Operator):
         mask = crl2mask(crl, int(self.hw[0]), int(self.hw[1]))
 
         # load model
-        try:
-            state = bpy.state
-            model = bpy.model
-        except AttributeError:
-            # must first initialize model
-            p = context.scene.settings.automask_path
-            if p == '':
-                raise ValueError('AutoMask path is empty.')
-            state = p
-            model = None
+        
+        # must first initialize model
+        p = context.scene.settings.automask_path
+        if p == '':
+            raise ValueError('AutoMask path is empty.')
+        state = p
+        model = None
         next_mask, state, model = track_object(model, state, mask, movpath, framenum)
         if type(next_mask) == dict:
             return next_mask
-        success, crl = fit2mask(next_mask)
+        success, crl = fit2mask(next_mask, maxnum=settings.maxnum)
 
         success = success and state['score'] > .8
 
         if not success:
             return {'FINISHED'}
         co, rh, lh = crl
-        print(co)
-        print([len(l) for l in crl])
-        bpy.context.scene.frame_set(framenum+1)
-        # bpy.ops.clip.keyframe_insert()
+
+        #bpy.ops.clip.keyframe_insert()
+        bpy.ops.clip.change_frame(frame=framenum+1)
+
         # create more points in the mask if needed
         N, newN = len(points), len(co)
-        print(N, newN)
-
+        bpy.ops.ed.undo_push()
         if newN > N:
             points.add(newN-N)
             for i in range(1, newN-N+1):
@@ -157,8 +157,7 @@ class OBJECT_OT_automask(Operator):
             p.co.x, p.co.y = self.relative_coord(co[i])
             p.handle_left.x, p.handle_left.y = self.relative_coord(lh[i])
             p.handle_right.x, p.handle_right.y = self.relative_coord(rh[i])
-        bpy.state = state
-        bpy.model = model
+
 
         return {'FINISHED'}
 
@@ -180,8 +179,9 @@ class PANEL0_PT_automask(Panel):
         layout = self.layout
         layout.use_property_split = True  # Active single-column layout
         row = layout.row()
-        row.operator("object.automask", text="Mask")
+        row.operator("object.automask", text="Mask (Single)", icon="TRACKING_FORWARD_SINGLE")
         row = layout.column()
+        layout.prop(settings, 'maxnum')
         layout.prop(settings, 'automask_path')
 
         layout.separator()
@@ -202,11 +202,7 @@ def unregister():
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)
-    try:
-        del bpy.state
-        del bpy.model
-    except AttributeError:
-        pass
+
     del bpy.types.Scene.settings
 
 if __name__ == "__main__":
