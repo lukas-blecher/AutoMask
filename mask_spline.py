@@ -1,13 +1,34 @@
 from geomdl import BSpline
 from geomdl import utilities
-from geomdl import exchange
-from geomdl.visualization import VisMPL
+from geomdl import fitting
 from PIL import Image, ImageDraw
 from scipy.misc import imresize
-from scipy.optimize import minimize
+from skimage import measure
 import numpy as np
 import logging
 logger = logging.getLogger('global')
+
+mapping = {0: np.array([-1., -1.]),
+           1: np.array([-1.,  0.]),
+           2: np.array([0., -1.]),
+           3: np.array([-1.,  1.]),
+           4: np.array([0., 0.]),
+           5: np.array([1., 1.]),
+           6: np.array([1., 0.]),
+           7: np.array([0., 1.]),
+           8: np.array([1., -1.])}
+
+
+def dir2num(x):
+    length = np.sqrt((x**2).sum())
+    if length > 0:
+        x=np.round(x/length)
+        x=np.round(np.sign(x)))
+    for i in range(9):
+        if (x == mapping[i]).all():
+            return i
+    print(x)
+    return 4
 
 
 def bspline2mask(cps, width, height, delta=0.05, scaling=5):
@@ -44,21 +65,87 @@ def mask2rect(mask):
     return (mi+ma)/2, (ma-mi)
 
 
-def fit2mask(crl, target, width, height, delta=.05,  scaling=1):
+def make_cirular(cps, distance=3):
+    # takes cps returns crl
+    cps = np.array(cps)
+    start, end = cps[:, 0, :], cps[:, -1, :]
+    # first test for approximate circularity
+    absmask = [np.abs(start[:, i].T[None, ...]-end[:, None, i]) for i in (0, 1)]
+    for i in range(2):
+        matrix = absmask[i] < distance
+        assert matrix.sum(0).all() and matrix.sum(1).all()
+    e, s = np.where(matrix)
+    c = np.mean(np.array([end[e], start[s]]), axis=0)
+    r = cps[:, 1, :]
+    l = cps[:, 2, :]
+    return np.array([c, r, l])[...,[1,0]]
 
-    #target = crl2mask(crl, width, height, delta=delta, scaling=scaling)
 
-    def loss(pred, target=target):
-        return (target ^ pred).sum()/target.sum()
+def fit2mask(target, maxnum=4, distance=3):
+    contours = measure.find_contours(target, .8)
+    # choose contour with highest point count
+    c = contours[np.argmax([len(c) for c in contours])]
+    import matplotlib.pyplot as plt
+    #plt.plot(c[:, 1], c[:, 0], linewidth=2)
+    #plt.show()
+    # convert to directions and remove unnecessary points
+    direction = []
+    last = c[0]
+    del_inds = []
+    for i in range(-1, len(c)):
+        number = dir2num(last-c[i])
+        if number == 4:
+            del_inds.append(i % len(c))
+            continue
+        direction.append(number)
+        last = c[i]
+    c = np.delete(c, del_inds, axis=0)
+    direction = np.array(direction)
+    # split curve into segments
+    uni, first = [], 0
+    for i in range(len(direction)):
+        if len(np.unique(direction[:i])) > maxnum:
+            first = i-1
+            break
+    breaks = [first]
+    for i in range(first, first+len(direction)):
+        i = i % len(direction)
+        if i >= breaks[-1]:
+            lui = len(np.unique(direction[breaks[-1]:i]))
+        else:
+            lui = len(np.unique(direction[np.concatenate([np.arange(breaks[-1], len(direction)), np.arange(i)])]))
+        if lui > maxnum:
+            breaks.append((i-1) % len(direction))
+        uni.append(lui % (maxnum+1))
+    # sort points into found segements
+    segments = []
+    split_ind = np.split(np.arange(len(direction)), sorted(breaks))
+    split_ind[0] = np.concatenate((split_ind[-1], split_ind[0]))
+    del split_ind[-1]
+    for ind in split_ind:
+        segments.append(c[ind%len(c)])
+    succ = True
+    crl = None
 
-    def fun(crl):
-        pred = crl2mask(crl.reshape(3, -1, 2), width, height, delta=delta, scaling=scaling)
-        return loss(pred)
 
-    x0 = np.asarray(crl).flatten()
-    res = minimize(fun, x0, method='nelder-mead')
-    succ = res.success and res.fun < 0.1
-    logger.info('Success: An approximation for the mask was found in %i steps' % res.nit if succ else 'No approximation was found in %i steps' % res.nit)
-    if succ:
-        logger.info('The final positions and initial positions differ by %.2f' % float(np.abs(crl-res.x.reshape(3, -1, 2)).sum()))
-    return succ, res.x.reshape(3, -1, 2).tolist()
+    try:
+        # check that we have all points
+        assert sum([len(s) for s in segments]) >= len(c)
+        # fit bspline curves to the segments
+        final_cps = []
+        for i in range(len(segments)):
+            points = segments[i].tolist()
+            curve = fitting.approximate_curve(points, 3, ctrlpts_size=4)
+            final_cps.append(curve.ctrlpts)
+            #curve.delta = .2
+            #evalpts = np.array(curve.evalpts)
+            #pts = np.array(points)
+            #plt.plot(evalpts[:, 0], evalpts[:, 1],label=i)
+            #plt.scatter(pts[:, 0], pts[:, 1], s=.2,color="red")
+        #plt.legend()
+        #plt.show()
+        crl = make_cirular(final_cps, distance).tolist()
+    except AssertionError:
+        succ = False
+        logger.info('No approximation to the mask could be found. Try again with other parameters.')
+    return succ, crl

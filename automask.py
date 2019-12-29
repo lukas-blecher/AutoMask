@@ -93,15 +93,16 @@ class OBJECT_OT_automask(Operator):
                 raise ValueError('AutoMask path is empty.')
             state = p
             model = None
-
         next_mask, state, model = track_object(model, state, mask, movpath, framenum)
         if type(next_mask) == dict:
             return next_mask
-        success, crl = fit2mask(crl, next_mask, int(self.hw[0]), int(self.hw[1]))
-        co, rh, lh = crl
+        success, crl = fit2mask(next_mask)
+        
         success = success and state['score'] > .8
+        
         if not success:
             return {'FINISHED'}
+        co, lh, rh = crl
         # bpy.context.scene.frame_set(framenum+1)
         # bpy.ops.clip.keyframe_insert()
         # bpy.ops.clip.change_frame(framenum+1)
