@@ -2,7 +2,7 @@
 from __future__ import print_function
 import bpy
 from bpy.types import Operator, Panel, PropertyGroup, WindowManager
-from bpy.props import PointerProperty, StringProperty
+from bpy.props import PointerProperty, StringProperty, IntProperty, FloatProperty
 import sys
 paths = [
     r'C:\Users\user\AppData\Local\Continuum\anaconda3\lib\site-packages',
@@ -21,6 +21,32 @@ bl_info = {
     'author': 'Lukas Blecher'
 }
 
+class Settings(PropertyGroup):
+
+    my_int: IntProperty(
+        name = "Int Value",
+        description="A integer property",
+        default = 23,
+        min = 10,
+        max = 100
+        )
+
+    my_float: FloatProperty(
+        name = "Float Value",
+        description = "A float property",
+        default = 23.7,
+        min = 0.01,
+        max = 30.0
+        )
+
+    automask_path: StringProperty(
+        name = "Project Directory",
+        description="Choose a directory:",
+        default=paths[-1],
+        maxlen=1024,
+        subtype='DIR_PATH'
+        )
+        
 
 class OBJECT_OT_automask(Operator):
     bl_idname = "object.automask"
@@ -38,6 +64,11 @@ class OBJECT_OT_automask(Operator):
         else:
             return lambda x: (x/frac)+off
 
+    def copy_point_attributes(self, point, new_point):
+        attributes = ['co', 'handle_left', 'handle_left_type', 'handle_right', 'handle_right_type', 'handle_type', 'weight']
+        for attr in attributes:
+            setattr(new_point, attr, getattr(point, attr))
+
     def absolute_coord(self, coordinate):
         width, height = self.hw
         coord = coordinate.copy()
@@ -49,7 +80,9 @@ class OBJECT_OT_automask(Operator):
 
     def execute(self, context):
         mask = context.space_data.mask
-        points = mask.layers.active.splines[0].points
+        maskSpline = mask.layers.active.splines[0]
+        points = maskSpline.points
+        maskSpline.use_cyclic = True
         clip = context.space_data.clip
         self.hw = clip.size
         if self.hw[0] < self.hw[1]:
@@ -88,7 +121,7 @@ class OBJECT_OT_automask(Operator):
             model = bpy.model
         except AttributeError:
             # must first initialize model
-            p = context.scene.automask_path
+            p = context.scene.settings.automask_path
             if p == '':
                 raise ValueError('AutoMask path is empty.')
             state = p
@@ -97,15 +130,27 @@ class OBJECT_OT_automask(Operator):
         if type(next_mask) == dict:
             return next_mask
         success, crl = fit2mask(next_mask)
-        
+
         success = success and state['score'] > .8
-        
+
         if not success:
             return {'FINISHED'}
-        co, lh, rh = crl
-        # bpy.context.scene.frame_set(framenum+1)
+        co, rh, lh = crl
+        print(co)
+        print([len(l) for l in crl])
+        bpy.context.scene.frame_set(framenum+1)
         # bpy.ops.clip.keyframe_insert()
-        # bpy.ops.clip.change_frame(framenum+1)
+        # create more points in the mask if needed
+        N, newN = len(points), len(co)
+        print(N, newN)
+
+        if newN > N:
+            points.add(newN-N)
+            for i in range(1, newN-N+1):
+                self.copy_point_attributes(points[0], points[-i])
+        elif newN < N:
+            for i in range(1, N-newN+1):
+                points.remove(points[-1])
 
         # change handles to the found optimum position
         for i, p in enumerate(points):
@@ -131,42 +176,38 @@ class PANEL0_PT_automask(Panel):
 
     # Draw UI
     def draw(self, context):
+        settings = context.scene.settings
         layout = self.layout
         layout.use_property_split = True  # Active single-column layout
         row = layout.row()
         row.operator("object.automask", text="Mask")
         row = layout.column()
-        row.prop(context.scene, 'automask_path')
+        layout.prop(settings, 'automask_path')
 
         layout.separator()
 
 
-classes = (OBJECT_OT_automask, PANEL0_PT_automask)
+classes = (OBJECT_OT_automask, PANEL0_PT_automask, Settings)
 
 
 def register():
-    bpy.types.Scene.automask_path = StringProperty(
-        name="Path",
-        default=paths[-1],
-        description="Define the path to the AutoMask project directory",
-        subtype='DIR_PATH'
-    )
+
     from bpy.utils import register_class
     for cls in classes:
         register_class(cls)
+    bpy.types.Scene.settings = PointerProperty(type=Settings)
 
 
 def unregister():
     from bpy.utils import unregister_class
     for cls in reversed(classes):
         unregister_class(cls)
-    del bpy.types.Scene.automask_path
     try:
         del bpy.state
         del bpy.model
     except AttributeError:
         pass
-
+    del bpy.types.Scene.settings
 
 if __name__ == "__main__":
     register()

@@ -22,8 +22,8 @@ mapping = {0: np.array([-1., -1.]),
 def dir2num(x):
     length = np.sqrt((x**2).sum())
     if length > 0:
-        x=np.round(x/length)
-        x=np.round(np.sign(x)))
+        x = np.round(x/length)
+        x = np.round(np.sign(x))
     for i in range(9):
         if (x == mapping[i]).all():
             return i
@@ -65,7 +65,7 @@ def mask2rect(mask):
     return (mi+ma)/2, (ma-mi)
 
 
-def make_cirular(cps, distance=3):
+def make_cirular(cps, distance=5):
     # takes cps returns crl
     cps = np.array(cps)
     start, end = cps[:, 0, :], cps[:, -1, :]
@@ -74,20 +74,18 @@ def make_cirular(cps, distance=3):
     for i in range(2):
         matrix = absmask[i] < distance
         assert matrix.sum(0).all() and matrix.sum(1).all()
+    matrix = np.eye(len(cps), k=1)+np.eye(len(cps), k=1-len(cps))
     e, s = np.where(matrix)
     c = np.mean(np.array([end[e], start[s]]), axis=0)
-    r = cps[:, 1, :]
-    l = cps[:, 2, :]
-    return np.array([c, r, l])[...,[1,0]]
+    r = cps[s, 1, :]
+    l = cps[e, 2, :]
+    return np.array([c, r, l])[..., [1, 0]]
 
 
 def fit2mask(target, maxnum=4, distance=3):
     contours = measure.find_contours(target, .8)
     # choose contour with highest point count
     c = contours[np.argmax([len(c) for c in contours])]
-    import matplotlib.pyplot as plt
-    #plt.plot(c[:, 1], c[:, 0], linewidth=2)
-    #plt.show()
     # convert to directions and remove unnecessary points
     direction = []
     last = c[0]
@@ -123,11 +121,10 @@ def fit2mask(target, maxnum=4, distance=3):
     split_ind[0] = np.concatenate((split_ind[-1], split_ind[0]))
     del split_ind[-1]
     for ind in split_ind:
-        segments.append(c[ind%len(c)])
+        segments.append(c[ind % len(c)])
     succ = True
     crl = None
-
-
+    print(len(segments))
     try:
         # check that we have all points
         assert sum([len(s) for s in segments]) >= len(c)
@@ -140,11 +137,15 @@ def fit2mask(target, maxnum=4, distance=3):
             #curve.delta = .2
             #evalpts = np.array(curve.evalpts)
             #pts = np.array(points)
-            #plt.plot(evalpts[:, 0], evalpts[:, 1],label=i)
-            #plt.scatter(pts[:, 0], pts[:, 1], s=.2,color="red")
+            #plt.plot(evalpts[:, 1], evalpts[:, 0], label=i)
+            #plt.scatter(pts[:, 1], pts[:, 0], s=.2, color="red")
+
+        crl = make_cirular(final_cps, distance)
+        #for i in range(len(segments)):
+        #    plt.scatter(*crl[:, i].T)
+        crl = crl.tolist()
         #plt.legend()
         #plt.show()
-        crl = make_cirular(final_cps, distance).tolist()
     except AssertionError:
         succ = False
         logger.info('No approximation to the mask could be found. Try again with other parameters.')
