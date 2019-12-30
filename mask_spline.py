@@ -73,16 +73,16 @@ def make_cirular(cps, distance=5):
     absmask = [np.abs(start[:, i].T[None, ...]-end[:, None, i]) for i in (0, 1)]
     for i in range(2):
         matrix = absmask[i] < distance
-        assert matrix.sum(0).all() and matrix.sum(1).all()
-    matrix = np.eye(len(cps), k=1)+np.eye(len(cps), k=1-len(cps))
-    e, s = np.where(matrix)
+        assert matrix.sum(0).all() and matrix.sum(1).all(), 'Mask is not circular'
+    e = np.arange(len(cps))
+    s = np.roll(e, -1)
     c = np.mean(np.array([end[e], start[s]]), axis=0)
     r = cps[s, 1, :]
     l = cps[e, 2, :]
     return np.array([c, r, l])[..., [1, 0]]
 
 
-def fit2mask(target, maxnum=4, distance=3):
+def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
     contours = measure.find_contours(target, .8)
     # choose contour with highest point count
     c = contours[np.argmax([len(c) for c in contours])]
@@ -100,21 +100,39 @@ def fit2mask(target, maxnum=4, distance=3):
     c = np.delete(c, del_inds, axis=0)
     direction = np.array(direction)
     # split curve into segments
-    uni, first = [], 0
-    for i in range(len(direction)):
-        if len(np.unique(direction[:i])) > maxnum:
-            first = i-1
-            break
-    breaks = [first]
-    for i in range(first, first+len(direction)):
-        i = i % len(direction)
+    breaks = [0]
+    count, i = 0, 0
+    max_pixel = len(direction)
+    while count < max_pixel:
+        i = count % len(direction)
         if i >= breaks[-1]:
-            lui = len(np.unique(direction[breaks[-1]:i]))
+            dirs = direction[breaks[-1]:i]
         else:
-            lui = len(np.unique(direction[np.concatenate([np.arange(breaks[-1], len(direction)), np.arange(i)])]))
-        if lui > maxnum:
+            dirs = direction[np.concatenate([np.arange(breaks[-1], len(direction)), np.arange(i)])]
+        bindirs = np.bincount(dirs)
+        if len(bindirs[bindirs != 0]) > maxnum and sorted(bindirs)[-maxnum-1] >= threshold:
+            new_break = (i-1) % len(direction)
+            delta = (dirs == np.abs(bindirs-threshold).argmin())[::-1][:threshold].sum()
+            new_break -= delta
+            i -= delta
+            if breaks[0] == 0:
+                breaks[0] = new_break
+                max_pixel += new_break
+            else:
+                breaks.append(new_break)
+        elif i-breaks[-1] >= maxlen and breaks[0] != 0:
             breaks.append((i-1) % len(direction))
-        uni.append(lui % (maxnum+1))
+        count += 1
+    # refine break points to alway have 4 or more points for fitting reasons
+    perm = np.argsort(breaks)
+    diffs = np.diff([*sorted(breaks), len(direction)+min(breaks)])
+    if np.count_nonzero(diffs < 4):
+        bad_inds = np.where(diffs < 4)[0]
+        for j in bad_inds:
+            breaks[perm[(j+1) % len(perm)]] -= int(round(diffs[j]/2))
+        for j in sorted(perm[bad_inds])[::-1]:
+            del breaks[j]
+    assert np.count_nonzero(np.diff(sorted(breaks)) >= 4), "refinement didnt work %s" % (str(breaks)+str(diffs)+str(bad_inds))
     # sort points into found segements
     segments = []
     split_ind = np.split(np.arange(len(direction)), sorted(breaks))
@@ -124,29 +142,32 @@ def fit2mask(target, maxnum=4, distance=3):
         segments.append(c[ind % len(c)])
     succ = True
     crl = None
-    print(len(segments))
     try:
         # check that we have all points
-        assert sum([len(s) for s in segments]) >= len(c)
+        assert sum([len(s) for s in segments]) >= len(c), '%i points were given instead of %i' % (sum([len(s) for s in segments]), len(c))
         # fit bspline curves to the segments
+        #import matplotlib.pyplot as plt
         final_cps = []
         for i in range(len(segments)):
             points = segments[i].tolist()
+            if len(points) == 0:
+                continue
+            assert len(points) >= 4, "%i Points to fit were given. At least 4 points are needed." % len(points)
             curve = fitting.approximate_curve(points, 3, ctrlpts_size=4)
             final_cps.append(curve.ctrlpts)
             #curve.delta = .2
             #evalpts = np.array(curve.evalpts)
             #pts = np.array(points)
             #plt.plot(evalpts[:, 1], evalpts[:, 0], label=i)
-            #plt.scatter(pts[:, 1], pts[:, 0], s=.2, color="red")
+            #plt.scatter(pts[:, 1], pts[:, 0], s=.2)
 
         crl = make_cirular(final_cps, distance)
-        #for i in range(len(segments)):
-        #    plt.scatter(*crl[:, i].T)
+        # for i in range(len(segments)):
+        #   plt.scatter(*crl[:, i].T)
         crl = crl.tolist()
         #plt.legend()
         #plt.show()
-    except AssertionError:
+    except AssertionError as e:
         succ = False
-        logger.info('No approximation to the mask could be found. Try again with other parameters.')
+        logger.info('No approximation to the mask could be found. Try again with other parameters. %s' % e)
     return succ, crl

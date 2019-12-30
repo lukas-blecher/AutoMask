@@ -24,11 +24,18 @@ bl_info = {
 class Settings(PropertyGroup):
 
     maxnum: IntProperty(
-        name = "Int Value",
-        description="A integer property",
+        name = "Directions",
+        description="The lower this value is the more points will be created",
         default = 3,
         min = 1,
         max = 5
+        )
+
+    maxlen: IntProperty(
+        name = "Max. Length",
+        description="The maximum amount of pixels a mask line segment is tracing",
+        default = 150,
+        min = 1
         )
 
     my_float: FloatProperty(
@@ -47,12 +54,7 @@ class Settings(PropertyGroup):
         subtype='DIR_PATH'
         )
         
-
-class OBJECT_OT_automask(Operator):
-    bl_idname = "object.automask"
-    bl_label = "AutoMask Operator"
-    bl_description = "Track the selected mask \nto the next frame"
-
+class AutoMask_helper:
     def big_trans(self, inv=False):
         return lambda x: x
 
@@ -95,6 +97,11 @@ class OBJECT_OT_automask(Operator):
             self.ytrans = self.big_trans()
             self.yinvt = self.big_trans()
 
+class OBJECT_OT_automask_single(Operator):
+    bl_idname = "object.automask_single"
+    bl_label = ""
+    bl_description = "Track the selected mask \nto the next frame"
+
     def execute(self, context):
         mask = context.space_data.mask
         settings = context.scene.settings
@@ -102,8 +109,9 @@ class OBJECT_OT_automask(Operator):
         points = maskSpline.points
         maskSpline.use_cyclic = True
         clip = context.space_data.clip
-        self.hw = clip.size
-        self.set_coordinate_transform()
+        amh=AutoMask_helper()
+        amh.hw = clip.size
+        amh.set_coordinate_transform()
         framenum = bpy.context.scene.frame_current
         movpath = bpy.path.abspath(clip.filepath)
         co, lhand, rhand = [], [], []
@@ -111,13 +119,13 @@ class OBJECT_OT_automask(Operator):
             # need types to be free as it is the most general type
             p.handle_left_type = 'FREE'
             p.handle_right_type = 'FREE'
-            co.append(self.absolute_coord(p.co))
-            lhand.append(self.absolute_coord(p.handle_left))
-            rhand.append(self.absolute_coord(p.handle_right))
+            co.append(amh.absolute_coord(p.co))
+            lhand.append(amh.absolute_coord(p.handle_left))
+            rhand.append(amh.absolute_coord(p.handle_right))
         # collection of coordinates and handles
         crl = [co, rhand, lhand]
         # get mask from the point coordinates
-        mask = crl2mask(crl, int(self.hw[0]), int(self.hw[1]))
+        mask = crl2mask(crl, int(amh.hw[0]), int(amh.hw[1]))
 
         # load model
         
@@ -130,7 +138,7 @@ class OBJECT_OT_automask(Operator):
         next_mask, state, model = track_object(model, state, mask, movpath, framenum)
         if type(next_mask) == dict:
             return next_mask
-        success, crl = fit2mask(next_mask, maxnum=settings.maxnum)
+        success, crl = fit2mask(next_mask, maxnum=settings.maxnum, maxlen=settings.maxlen)
 
         success = success and state['score'] > .8
 
@@ -139,31 +147,108 @@ class OBJECT_OT_automask(Operator):
         co, rh, lh = crl
 
         #bpy.ops.clip.keyframe_insert()
+        bpy.ops.ed.undo_push()
         bpy.ops.clip.change_frame(frame=framenum+1)
 
         # create more points in the mask if needed
         N, newN = len(points), len(co)
-        bpy.ops.ed.undo_push()
         if newN > N:
             points.add(newN-N)
             for i in range(1, newN-N+1):
-                self.copy_point_attributes(points[0], points[-i])
+                amh.copy_point_attributes(points[0], points[-i])
         elif newN < N:
             for i in range(1, N-newN+1):
                 points.remove(points[-1])
 
         # change handles to the found optimum position
         for i, p in enumerate(points):
-            p.co.x, p.co.y = self.relative_coord(co[i])
-            p.handle_left.x, p.handle_left.y = self.relative_coord(lh[i])
-            p.handle_right.x, p.handle_right.y = self.relative_coord(rh[i])
-
+            p.co.x, p.co.y = amh.relative_coord(co[i])
+            p.handle_left.x, p.handle_left.y = amh.relative_coord(lh[i])
+            p.handle_right.x, p.handle_right.y = amh.relative_coord(rh[i])
+        # insert keyframe
+        #for p in points:
+        #    p.keyframe_insert(data_path="co")
 
         return {'FINISHED'}
 
+class OBJECT_OT_automask(Operator):
+    bl_idname = "object.automask"
+    bl_label = ""
+    bl_description = "Track the selected mask \nuntil the object is lost"
+
+    def execute(self, context):
+        mask = context.space_data.mask
+        settings = context.scene.settings
+        maskSpline = mask.layers.active.splines[0]
+        points = maskSpline.points
+        maskSpline.use_cyclic = True
+        clip = context.space_data.clip
+        amh=AutoMask_helper()
+        amh.hw = clip.size
+        amh.set_coordinate_transform()
+        framenum = bpy.context.scene.frame_current
+        movpath = bpy.path.abspath(clip.filepath)
+        co, lhand, rhand = [], [], []
+        for p in points:
+            # need types to be free as it is the most general type
+            p.handle_left_type = 'FREE'
+            p.handle_right_type = 'FREE'
+            co.append(amh.absolute_coord(p.co))
+            lhand.append(amh.absolute_coord(p.handle_left))
+            rhand.append(amh.absolute_coord(p.handle_right))
+        # collection of coordinates and handles
+        crl = [co, rhand, lhand]
+
+        # must first initialize model
+        p = context.scene.settings.automask_path
+        if p == '':
+            raise ValueError('AutoMask path is empty.')
+        state = p
+        model = None
+        success = True
+        frame_end = context.scene.frame_end
+        while success and framenum < frame_end:
+            framenum=bpy.context.scene.frame_current
+            # get mask from the point coordinates
+            mask = crl2mask(crl, int(amh.hw[0]), int(amh.hw[1]))
+            next_mask, state, model = track_object(model, state, mask, movpath, framenum)
+            if type(next_mask) == dict:
+                return next_mask
+            success, crl = fit2mask(next_mask, maxnum=settings.maxnum, maxlen=settings.maxlen)
+
+            success = success and state['score'] > .8
+
+            if not success:
+                return {'FINISHED'}
+            co, rh, lh = crl
+
+            #bpy.ops.clip.keyframe_insert()
+            bpy.ops.ed.undo_push()
+            bpy.ops.clip.change_frame(frame=framenum+1)
+
+            # create more points in the mask if needed
+            N, newN = len(points), len(co)
+            if newN > N:
+                points.add(newN-N)
+                for i in range(1, newN-N+1):
+                    amh.copy_point_attributes(points[0], points[-i])
+            elif newN < N:
+                for i in range(1, N-newN+1):
+                    points.remove(points[-1])
+
+            # change handles to the found optimum position
+            for i, p in enumerate(points):
+                p.co.x, p.co.y = amh.relative_coord(co[i])
+                p.handle_left.x, p.handle_left.y = amh.relative_coord(lh[i])
+                p.handle_right.x, p.handle_right.y = amh.relative_coord(rh[i])
+            # insert keyframe
+            #for p in points:
+            #    p.keyframe_insert(data_path="co")
+
+        return {'FINISHED'}
 
 class PANEL0_PT_automask(Panel):
-    bl_label = "AutoMask"
+    bl_label = "Mask Tracking"
     bl_idname = "PANEL0_PT_automask"
     bl_space_type = 'CLIP_EDITOR'
     bl_region_type = 'UI'
@@ -178,16 +263,25 @@ class PANEL0_PT_automask(Panel):
         settings = context.scene.settings
         layout = self.layout
         layout.use_property_split = True  # Active single-column layout
-        row = layout.row()
-        row.operator("object.automask", text="Mask (Single)", icon="TRACKING_FORWARD_SINGLE")
+        c = layout.column()
+        row = c.row()
+        split = row.split(factor=0.3)
+        c = split.column()
+        c.label(text="Track:")
+        split = split.split()
+        c = split.row()
+        c.operator("object.automask", icon="TRACKING_FORWARDS")
+        c.operator("object.automask_single", icon="TRACKING_FORWARDS_SINGLE")
         row = layout.column()
+        layout.prop(settings, 'maxlen')
         layout.prop(settings, 'maxnum')
-        layout.prop(settings, 'automask_path')
+        #layout.prop(settings, 'automask_path')
 
         layout.separator()
 
 
-classes = (OBJECT_OT_automask, PANEL0_PT_automask, Settings)
+classes = (OBJECT_OT_automask_single, OBJECT_OT_automask, PANEL0_PT_automask, Settings)
+addon_keymaps = []
 
 
 def register():
@@ -196,7 +290,11 @@ def register():
     for cls in classes:
         register_class(cls)
     bpy.types.Scene.settings = PointerProperty(type=Settings)
-
+    # handle the keymap
+    wm = bpy.context.window_manager
+    km = wm.keyconfigs.addon.keymaps.new(name='automask', space_type='CLIP_EDITOR')
+    kmi = km.keymap_items.new(OBJECT_OT_automask_single.bl_idname, 'RIGHT_ARROW', 'PRESS', alt=True)
+    addon_keymaps.append(km)
 
 def unregister():
     from bpy.utils import unregister_class
@@ -204,6 +302,12 @@ def unregister():
         unregister_class(cls)
 
     del bpy.types.Scene.settings
+    # handle the keymap
+    wm = bpy.context.window_manager
+    for km in addon_keymaps:
+        wm.keyconfigs.addon.keymaps.remove(km)
+    # clear the list
+    del addon_keymaps[:]
 
 if __name__ == "__main__":
     register()
