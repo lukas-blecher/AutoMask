@@ -110,10 +110,10 @@ def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
         else:
             dirs = direction[np.concatenate([np.arange(breaks[-1], len(direction)), np.arange(i)])]
         bindirs = np.bincount(dirs)
-        if len(bindirs[bindirs != 0]) > maxnum and sorted(bindirs)[-maxnum-1] >= threshold:
-            new_break = (i-1) % len(direction)
-            delta = (dirs == np.abs(bindirs-threshold).argmin())[::-1][:threshold].sum()
-            new_break -= delta
+        difdir = np.diff(dirs)
+        if (np.diff(np.where(difdir != 0)[0]) > threshold).sum() > (maxnum-2) or (len(np.unique(bindirs)) > maxnum and sorted(bindirs)[-maxnum-1] >= threshold):
+            delta = (difdir[-threshold-1:] != 0).sum()
+            new_break = (i-1-delta) % len(direction)
             i -= delta
             if breaks[0] == 0:
                 breaks[0] = new_break
@@ -165,8 +165,8 @@ def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
         # for i in range(len(segments)):
         #   plt.scatter(*crl[:, i].T)
         crl = crl.tolist()
-        #plt.legend()
-        #plt.show()
+        # plt.legend()
+        # plt.show()
     except AssertionError as e:
         succ = False
         logger.info('No approximation to the mask could be found. Try again with other parameters. %s' % e)

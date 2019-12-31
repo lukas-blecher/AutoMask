@@ -37,6 +37,13 @@ class Settings(PropertyGroup):
         default = 150,
         min = 1
         )
+    
+    threshold: IntProperty(
+        name = "Treshold",
+        description="The amount of points that can point in a different direction\nbefore a new segment is created",
+        default = 10,
+        min = 0
+        )
 
     my_float: FloatProperty(
         name = "Float Value",
@@ -138,7 +145,7 @@ class OBJECT_OT_automask_single(Operator):
         next_mask, state, model = track_object(model, state, mask, movpath, framenum)
         if type(next_mask) == dict:
             return next_mask
-        success, crl = fit2mask(next_mask, maxnum=settings.maxnum, maxlen=settings.maxlen)
+        success, crl = fit2mask(next_mask, maxnum=settings.maxnum, threshold=settings.threshold, maxlen=settings.maxlen)
 
         success = success and state['score'] > .8
 
@@ -207,14 +214,14 @@ class OBJECT_OT_automask(Operator):
         model = None
         success = True
         frame_end = context.scene.frame_end
-        while success and framenum < frame_end:
+        while success and framenum < frame_end - 1:
             framenum=bpy.context.scene.frame_current
             # get mask from the point coordinates
             mask = crl2mask(crl, int(amh.hw[0]), int(amh.hw[1]))
             next_mask, state, model = track_object(model, state, mask, movpath, framenum)
             if type(next_mask) == dict:
                 return next_mask
-            success, crl = fit2mask(next_mask, maxnum=settings.maxnum, maxlen=settings.maxlen)
+            success, crl = fit2mask(next_mask, maxnum=settings.maxnum, threshold=settings.threshold, maxlen=settings.maxlen)
 
             success = success and state['score'] > .8
 
@@ -274,6 +281,7 @@ class PANEL0_PT_automask(Panel):
         c.operator("object.automask_single", icon="TRACKING_FORWARDS_SINGLE")
         row = layout.column()
         layout.prop(settings, 'maxlen')
+        layout.prop(settings, 'threshold')
         layout.prop(settings, 'maxnum')
         #layout.prop(settings, 'automask_path')
 
