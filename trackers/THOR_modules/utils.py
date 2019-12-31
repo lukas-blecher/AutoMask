@@ -7,7 +7,6 @@
 import cv2
 import torch
 import numpy as np
-from colorama import Fore, Style
 
 # numpy - torch conversions
 
@@ -121,7 +120,7 @@ def xywh_to_xyxy(bboxes, clipMin=-LIMIT, clipWidth=LIMIT, clipHeight=LIMIT,
 
 
 def print_color(str_, color="Fore.RED"):
-    print(color + str_ + f"{Style.RESET_ALL}")
+    print(color + str_)
 
 
 def IOU_numpy(rect1, rect2):

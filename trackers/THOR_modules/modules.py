@@ -12,7 +12,6 @@ import abc
 import numpy as np
 import torch
 import torch.nn.functional as F
-from colorama import Fore
 
 from .utils import to_numpy, print_color
 
@@ -270,15 +269,10 @@ class LT_Module(TemplateModule):
 
         # if the idx is -2 or -1, the template is rejected, otherwise we update
         if throwaway_idx == -2:
-            if self.verbose:
-                print_color(f"DROPPED: too far from base template", Fore.BLUE)
+            pass
         elif throwaway_idx == -1:
-            if self.verbose:
-                print_color(f"DROPPED: new template is not better", Fore.GREEN)
+            pass
         else:
-            if self.verbose:
-                print_color(f"UPDATING: Switching Template "+
-                            f"{throwaway_idx}", Fore.RED)
             self._set_temp(temp=temp, idx=throwaway_idx)
             self._update_gram_matrix(curr_sims=curr_sims, self_sim=self_sim, idx=throwaway_idx)
             if self.viz:

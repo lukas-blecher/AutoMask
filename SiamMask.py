@@ -32,11 +32,7 @@ def track_object(model, state, mask, vid_path, framenum):
     vs = cv2.VideoCapture(vid_path)
     vs.set(1, framenum-1)
     ret, im = vs.read()
-    '''import matplotlib.pyplot as plt
-    plt.imshow(mask)
-    plt.show
-    plt.imshow(cv2.cvtColor(bb_on_im(im.copy(), *mask2rect(mask), mask), cv2.COLOR_BGR2RGB))
-    plt.show()'''
+    im = im[..., :3]
     if type(state) == str:
         model = create_model(state)
         state = model.setup(im, *mask2rect(mask))
@@ -45,6 +41,7 @@ def track_object(model, state, mask, vid_path, framenum):
     if not ret:
         return {'FINISHED'}, state, model
     _, im = vs.read()
+    im = im[..., :3]
     state = model.track(im, state)
     new_mask = state['mask'] > state['p'].seg_thr
     '''plt.imshow(cv2.cvtColor(bb_on_im(im, *mask2rect(new_mask), new_mask), cv2.COLOR_BGR2RGB))
