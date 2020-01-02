@@ -346,7 +346,7 @@ class PANEL0_PT_automask(Panel):
         c.operator("object.automask", icon="TRACKING_FORWARDS")
         c.operator("object.automask_single", icon="TRACKING_FORWARDS_SINGLE")
         # clear mask operators
-       ''' c = layout.column()
+        ''' c = layout.column()
         row = c.row()
         split = row.split(factor=0.3)
         c = split.column()
