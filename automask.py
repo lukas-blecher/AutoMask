@@ -5,8 +5,8 @@ from bpy.types import Operator, Panel, PropertyGroup, WindowManager
 from bpy.props import PointerProperty, StringProperty, IntProperty, FloatProperty, BoolProperty
 import sys
 paths = [
-    r'C:\Users\user\AppData\Local\Continuum\anaconda3\lib\site-packages',
-    r'C:\Users\user\Desktop\ML\AutoMask'
+    #PYTHON_PATH,
+    PROJECT_DIR 
 ]
 for p in paths:
     sys.path.insert(0, p)
