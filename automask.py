@@ -120,10 +120,10 @@ class AutoMask_helper:
         co_tot, lhand_tot, rhand_tot = [], [], []
         framenum = bpy.context.scene.frame_current
         try:
-            _=int(layer.name.split('.f')[-1])
+            _ = int(layer.name.split('.f')[-1])
         except ValueError:
             # no frame identification in the masklayer name
-            layer.name = layer.name + '.f%i'%framenum
+            layer.name = layer.name + '.f%i' % framenum
         for i, maskSpline in enumerate(maskSplines):
             points = maskSpline.points
             maskSpline.use_cyclic = True
@@ -266,6 +266,59 @@ class OBJECT_OT_automask(Operator):
         return {'CANCELLED'}
 
 
+def clear_masks(context, forwards=True):
+    f = context.scene.frame_current
+    mask = context.space_data.mask
+    layers = mask.layers
+    for l in layers:
+        try:
+            l_num = int(l.name.split('.f')[-1])
+        except ValueError:
+            continue
+        if (forwards and f < l_num) or (not forwards and f > l_num):
+            layers.remove(l)
+
+
+def MaskLayerActivater(scene):
+    if scene.settings.change_layer:
+        f = scene.frame_current
+        masks = bpy.data.masks
+        for m in masks:
+            layers = m.layers
+            for l in layers:
+                try:
+                    l_num = int(l.name.split('.f')[-1])
+                except ValueError:
+                    continue
+                if f == l_num:
+                    layers.active = l
+                    break
+
+
+class OBJECT_OT_clear_forwards(Operator):
+    bl_idname = "object.clear_forwards"
+    bl_label = ""
+    bl_description = "Delete all the masks after this frame"
+
+    def execute(self, context):
+        bpy.ops.ed.undo_push()
+        clear_masks(context)
+        MaskLayerActivater(context.scene)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_clear_backwards(Operator):
+    bl_idname = "object.clear_backwards"
+    bl_label = ""
+    bl_description = "Delete all the masks before this frame"
+
+    def execute(self, context):
+        bpy.ops.ed.undo_push()
+        clear_masks(context, False)
+        MaskLayerActivater(context.scene)
+        return {'FINISHED'}
+
+
 class PANEL0_PT_automask(Panel):
     bl_label = "Mask Tracking"
     bl_idname = "PANEL0_PT_automask"
@@ -282,6 +335,7 @@ class PANEL0_PT_automask(Panel):
         settings = context.scene.settings
         layout = self.layout
         layout.use_property_split = True  # Active single-column layout
+        # track masks operators
         c = layout.column()
         row = c.row()
         split = row.split(factor=0.3)
@@ -291,6 +345,16 @@ class PANEL0_PT_automask(Panel):
         c = split.row()
         c.operator("object.automask", icon="TRACKING_FORWARDS")
         c.operator("object.automask_single", icon="TRACKING_FORWARDS_SINGLE")
+        # clear mask operators
+       ''' c = layout.column()
+        row = c.row()
+        split = row.split(factor=0.3)
+        c = split.column()
+        c.label(text="Clear:")
+        split = split.split()
+        c = split.row()
+        c.operator("object.clear_backwards", icon="TRACKING_CLEAR_BACKWARDS")
+        c.operator("object.clear_forwards", icon="TRACKING_CLEAR_FORWARDS")'''
         row = layout.column()
         layout.prop(settings, 'maxlen')
         layout.prop(settings, 'threshold')
@@ -299,23 +363,9 @@ class PANEL0_PT_automask(Panel):
 
         layout.separator()
 
-def MaskLayerActivater(scene):
-    if scene.settings.change_layer:
-        f = scene.frame_current
-        masks=bpy.data.masks
-        for m in masks:
-            layers=m.layers 
-            for l in layers:
-                try:
-                    l_num=int(l.name.split('.f')[-1])
-                except ValueError:
-                    continue
-                if f==l_num:
-                    layers.active=l
-                    break
 
-classes = (OBJECT_OT_automask_single, OBJECT_OT_automask, PANEL0_PT_automask, Settings)
-addon_keymaps = []
+classes = (OBJECT_OT_automask_single, OBJECT_OT_automask, OBJECT_OT_clear_forwards, OBJECT_OT_clear_backwards, PANEL0_PT_automask, Settings)
+
 
 def remove_handler():
     my_handler_list = bpy.app.handlers.frame_change_pre
@@ -331,7 +381,8 @@ def register():
         register_class(cls)
     bpy.types.Scene.settings = PointerProperty(type=Settings)
     remove_handler()
-    bpy.app.handlers.frame_change_pre.append(MaskLayerActivater)   
+    bpy.app.handlers.frame_change_pre.append(MaskLayerActivater)
+
 
 def unregister():
     from bpy.utils import unregister_class
@@ -339,6 +390,7 @@ def unregister():
         unregister_class(cls)
     del bpy.types.Scene.settings
     remove_handler()
+
 
 if __name__ == "__main__":
     register()
