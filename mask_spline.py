@@ -132,7 +132,6 @@ def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
             breaks[perm[(j+1) % len(perm)]] -= int(round(diffs[j]/2))
         for j in sorted(perm[bad_inds])[::-1]:
             del breaks[j]
-    assert np.count_nonzero(np.diff(sorted(breaks)) >= 4), "refinement didnt work %s" % (str(breaks)+str(diffs)+str(bad_inds))
     # sort points into found segements
     segments = []
     split_ind = np.split(np.arange(len(direction)), sorted(breaks))
@@ -146,7 +145,6 @@ def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
         # check that we have all points
         assert sum([len(s) for s in segments]) >= len(c), '%i points were given instead of %i' % (sum([len(s) for s in segments]), len(c))
         # fit bspline curves to the segments
-        #import matplotlib.pyplot as plt
         final_cps = []
         for i in range(len(segments)):
             points = segments[i].tolist()
@@ -155,18 +153,8 @@ def fit2mask(target, maxnum=4, distance=3, threshold=5, maxlen=150):
             assert len(points) >= 4, "%i Points to fit were given. At least 4 points are needed." % len(points)
             curve = fitting.approximate_curve(points, 3, ctrlpts_size=4)
             final_cps.append(curve.ctrlpts)
-            #curve.delta = .2
-            #evalpts = np.array(curve.evalpts)
-            #pts = np.array(points)
-            #plt.plot(evalpts[:, 1], evalpts[:, 0], label=i)
-            #plt.scatter(pts[:, 1], pts[:, 0], s=.2)
 
-        crl = make_cirular(final_cps, distance)
-        # for i in range(len(segments)):
-        #   plt.scatter(*crl[:, i].T)
-        crl = crl.tolist()
-        # plt.legend()
-        # plt.show()
+        crl = make_cirular(final_cps, distance).tolist()
     except AssertionError as e:
         succ = False
         logger.info('No approximation to the mask could be found. Try again with other parameters. %s' % e)
