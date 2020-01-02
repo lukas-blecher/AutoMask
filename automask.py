@@ -206,7 +206,7 @@ class OBJECT_OT_automask_single(Operator):
         state = proj_dir  # set first state to proj_dir
         model = None
         ret = amh.automask(context, model, state, movpath)
-        if type(ret) == dict:
+        if type(ret) == set:
             return ret
         del ret
         return {'FINISHED'}
@@ -229,7 +229,7 @@ class OBJECT_OT_automask(Operator):
             frame_end = context.scene.frame_end
             if bpy.context.scene.frame_current < frame_end-1:
                 ret = self.amh.automask(context, self.model, self.state, self.amh.movpath)
-                if type(ret) == dict:
+                if type(ret) == set:
                     self._calcs_done = True
                 else:
                     self.model = ret[0]
