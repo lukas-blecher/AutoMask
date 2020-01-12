@@ -265,6 +265,10 @@ class OBJECT_OT_automask(Operator):
             del self.state
         return {'CANCELLED'}
 
+def delete_layer_keyframes(layer):
+    layer.keyframe_delete('hide')
+    layer.keyframe_delete('hide_render')
+    layer.keyframe_delete('hide_select')
 
 def clear_masks(context, forwards=True):
     f = context.scene.frame_current
@@ -276,6 +280,7 @@ def clear_masks(context, forwards=True):
         except ValueError:
             continue
         if (forwards and f < l_num) or (not forwards and f > l_num):
+            delete_layer_keyframes(l)
             layers.remove(l)
 
 
@@ -345,16 +350,16 @@ class PANEL0_PT_automask(Panel):
         c = split.row()
         c.operator("object.automask", icon="TRACKING_FORWARDS")
         c.operator("object.automask_single", icon="TRACKING_FORWARDS_SINGLE")
-        # clear mask operators
-        ''' c = layout.column()
-        row = c.row()
-        split = row.split(factor=0.3)
-        c = split.column()
-        c.label(text="Clear:")
-        split = split.split()
-        c = split.row()
-        c.operator("object.clear_backwards", icon="TRACKING_CLEAR_BACKWARDS")
-        c.operator("object.clear_forwards", icon="TRACKING_CLEAR_FORWARDS")'''
+        # clear mask operators (crashes blender as of now)
+        #c = layout.column()
+        #row = c.row()
+        #split = row.split(factor=0.3)
+        #c = split.column()
+        #c.label(text="Clear:")
+        #split = split.split()
+        #c = split.row()
+        #c.operator("object.clear_backwards", icon="TRACKING_CLEAR_BACKWARDS")
+        #c.operator("object.clear_forwards", icon="TRACKING_CLEAR_FORWARDS")
         row = layout.column()
         layout.prop(settings, 'maxlen')
         layout.prop(settings, 'threshold')

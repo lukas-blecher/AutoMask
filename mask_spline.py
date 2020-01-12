@@ -2,7 +2,6 @@ from geomdl import BSpline
 from geomdl import utilities
 from geomdl import fitting
 from PIL import Image, ImageDraw
-from scipy.misc import imresize
 from skimage import measure
 import numpy as np
 import logging
@@ -27,7 +26,6 @@ def dir2num(x):
     for i in range(9):
         if (x == mapping[i]).all():
             return i
-    print(x)
     return 4
 
 
