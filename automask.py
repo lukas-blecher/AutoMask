@@ -227,7 +227,7 @@ class OBJECT_OT_automask(Operator):
         elif event.type == 'TIMER' and not self._updating and not self._calcs_done:
             self._updating = True
             frame_end = context.scene.frame_end
-            if bpy.context.scene.frame_current < frame_end-1:
+            if bpy.context.scene.frame_current < frame_end:
                 ret = self.amh.automask(context, self.model, self.state, self.amh.movpath)
                 if type(ret) == set:
                     self._calcs_done = True
