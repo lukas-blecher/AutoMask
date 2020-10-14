@@ -114,8 +114,12 @@ class AutoMask_helper:
 
     def automask(self, context, model, state, movpath):
         mask = context.space_data.mask
+        if mask is None:
+            raise ValueError
         settings = context.scene.settings
         layer = mask.layers.active
+        if layer is None:
+            raise ValueError
         maskSplines = layer.splines
         co_tot, lhand_tot, rhand_tot = [], [], []
         framenum = bpy.context.scene.frame_current
@@ -197,6 +201,9 @@ class OBJECT_OT_automask_single(Operator):
     def execute(self, context):
         clip = context.space_data.clip
         movpath = bpy.path.abspath(clip.filepath)
+        movie_details = {'path': movpath, 'source': clip.source}
+        if clip.source == 'SEQUENCE':
+            movie_details['duration'] = clip.frame_duration
         amh = AutoMask_helper()
         amh.hw = clip.size
         amh.set_coordinate_transform()
@@ -205,7 +212,7 @@ class OBJECT_OT_automask_single(Operator):
             raise ValueError('AutoMask path is empty.')
         state = proj_dir  # set first state to proj_dir
         model = None
-        ret = amh.automask(context, model, state, movpath)
+        ret = amh.automask(context, model, state, movie_details)
         if type(ret) == set:
             return ret
         del ret
@@ -228,7 +235,11 @@ class OBJECT_OT_automask(Operator):
             self._updating = True
             frame_end = context.scene.frame_end
             if bpy.context.scene.frame_current < frame_end:
-                ret = self.amh.automask(context, self.model, self.state, self.amh.movpath)
+                try:
+                    ret = self.amh.automask(context, self.model, self.state, self.amh.movpath)
+                except ValueError:
+                    self.report({'ERROR'}, 'No Mask is selected')
+                    return self.cancel(context)
                 if type(ret) == set:
                     self._calcs_done = True
                 else:
@@ -236,14 +247,17 @@ class OBJECT_OT_automask(Operator):
                     self.state = ret[1]
             self._updating = False
         if self._calcs_done:
-            self.cancel(context)
+            return self.cancel(context)
 
         return {'PASS_THROUGH'}
 
     def execute(self, context):
         clip = context.space_data.clip
         self.amh = AutoMask_helper()
-        self.amh.movpath = bpy.path.abspath(clip.filepath)
+        movie_details = {'path': bpy.path.abspath(clip.filepath), 'source': clip.source}
+        if clip.source == 'SEQUENCE':
+            movie_details['duration'] = clip.frame_duration
+        self.amh.movpath = movie_details
         self.amh.hw = clip.size
         self.amh.set_coordinate_transform()
         proj_dir = paths[-1]
@@ -265,10 +279,12 @@ class OBJECT_OT_automask(Operator):
             del self.state
         return {'CANCELLED'}
 
+
 def delete_layer_keyframes(layer):
     layer.keyframe_delete('hide')
     layer.keyframe_delete('hide_render')
     layer.keyframe_delete('hide_select')
+
 
 def clear_masks(context, forwards=True):
     f = context.scene.frame_current

@@ -8,13 +8,40 @@ from trackers.tracker import SiamMask_Tracker, cfg
 from mask_spline import mask2rect
 
 
+class ImageReader:
+    is_video = True
+
+    def __init__(self, movie_details, framenum):
+        print(movie_details)
+        if movie_details['source'] == 'SEQUENCE':
+            self.is_video = False
+            dirname = os.path.dirname(movie_details['path'])
+            imgs = os.listdir(dirname)
+            ind = imgs.index(os.path.basename(movie_details['path']))
+            self.imgs = [os.path.join(dirname, i) for i in imgs[ind:]]
+            self.i = framenum-1
+        else:
+            self.vs = cv2.VideoCapture(movie_details['path'])
+            self.vs.set(1, framenum-1)
+        print(self.is_video)
+
+    def read(self):
+        if self.is_video:
+            return self.vs.read()
+        else:
+            if self.i+1 > len(self.imgs):
+                return False, cv2.imread(self.imgs[-1])
+            else:
+                self.i += 1
+                return True, cv2.imread(self.imgs[self.i-1])
+
+
 def create_model(path):
     return SiamMask_Tracker(cfg, path)
 
 
-def track_object(model, state, mask, vid_path, framenum):
-    vs = cv2.VideoCapture(vid_path)
-    vs.set(1, framenum-1)
+def track_object(model, state, mask, movie_details, framenum):
+    vs = ImageReader(movie_details, framenum)
     ret, im = vs.read()
     im = im[..., :3]
     if type(state) == str:
