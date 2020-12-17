@@ -6,4 +6,4 @@ geomdl>=5.2.9
 torch>=1.3.1
 numpy>=1.18.0
 Pillow>=6.2.1
-skimage>=0.0
+scikit-image
